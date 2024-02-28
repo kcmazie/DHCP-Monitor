@@ -1,5 +1,5 @@
 <#==============================================================================
-         File Name : DHCP-Manager.ps1
+         File Name : DHCP-Monitor.ps1
    Original Author : Kenneth C. Mazie (kcmjr AT kcmjr.com)
                    : 
        Description : A tool for monitoring DHCP scope statistics.
