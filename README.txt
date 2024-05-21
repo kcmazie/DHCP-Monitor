@@ -26,5 +26,7 @@
                    : v2.1 - 12-15-23 - Adjusted email options, report format, other minor bugs.
                    : v3.0 - 12-25-23 - Relocated private settings out to external config for publishing. 
                    : v3.1 - 01-25-24 - Altered email send so it always goes out if over 80 or 95 %
+                   : v3.2 - 05-21-24 - Added color gradiations for % used column.  Added generalized 
+                   : grey background.
                    :                  
 ==============================================================================#>
