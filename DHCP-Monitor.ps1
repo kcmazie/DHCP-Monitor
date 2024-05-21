@@ -1,13 +1,13 @@
 <#==============================================================================
-         File Name : DHCP-Monitor.ps1
+         File Name : DHCP-Manager.ps1
    Original Author : Kenneth C. Mazie (kcmjr AT kcmjr.com)
                    : 
-       Description : A tool for monitoring DHCP scope statistics.
+       Description : A multi-purpose tool for managing and monitoring DHCP.
                    : 
              Notes : Normal operation is with no command line options.  
                    : Commandline options intentionally left out to avoid accidents.
                    :
-      Requirements : Requires the PowerShell DHCPServer extensions.  Must be run ON a DHCP server.
+      Requirements : Requires the PowerShell DHCPServer extensions.
                    : 
                    : 
           Warnings : 
@@ -21,11 +21,13 @@
                    : https://github.com/n2501r/spiderzebra/blob/master/PowerShell/DHCP_Scope_Report.ps1
                    : 
     Last Update by : Kenneth C. Mazie                                           
-   Version History : v1.0 - 08-16-22 - Original.  Forked from DHCP manager script. 
+   Version History : v1.0 - 08-16-22 - Original 
     Change History : v2.0 - 09-00-23 - Numerous operational & bug fixes
                    : v2.1 - 12-15-23 - Adjusted email options, report format, other minor bugs.
                    : v3.0 - 12-25-23 - Relocated private settings out to external config for publishing. 
                    : v3.1 - 01-25-24 - Altered email send so it always goes out if over 80 or 95 %
+                   : v3.2 - 05-21-24 - Added color gradiations for % used column.  Added generalized 
+                   : grey background.
                    :                  
 ==============================================================================#>
 Clear-Host
@@ -122,6 +124,7 @@ Function Detect1 ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray){
             Write-host '        '$Option' '$Count' : '$Item
         }Else{
             Write-host '        '$Option' '$Count' : '$Item
+            #StatusMsg $Msg "Red" $ExtOption.Console
             $Update = $true
         }
         $Count++
@@ -231,6 +234,12 @@ $Data = "<table border='3' width='100%'><tbody>
 $Over80 = 0
 $Over95 = 0
 $Disabled = 0
+$BGColorGrey = "#dfdfdf"                                                #--[ Grey default cell background ]--
+$BGColorRed = "#ff0000"                                                 #--[ Red background for alerts ]-- 
+$BGColorOra = "#ff9900"                                                 #--[ Orange background for alerts ]-- 
+$BGColorYel = "#ffd900"                                                 #--[ Yellow background for alerts ]-- 
+$FGColor = "#000000"                                                    #--[ Black default cell foreground ]--
+
 foreach ($Scope in $SiteScopes ){
     $ScopeID = $Scope.ScopeID.ipaddresstostring
     $ScopeName = $Scope.name
@@ -243,15 +252,15 @@ foreach ($Scope in $SiteScopes ){
     $AddrTotal = $AddrFree+$AddrInUse
     $Total = $Total+[int]$ScopeStats.InUse 
     If ($AddrPercent -ge 95){
-        $Data = $Data + "<tr bgcolor='red'><font color='yellow'><strong>" 
+        $Data = $Data + "<tr bgcolor=$BGColorRed><font color='yellow'><strong>" #able width='100%'><tbody>"
         $SendEmail = $True
         $Over95++
     }ElseIf ($AddrPercent -ge 80){
-        $Data = $Data + "<tr bgcolor='yellow'><strong>" 
+        $Data = $Data + "<tr bgcolor=$BGColorYel><strong>" #able width='100%'><tbody>"
         $SendEmail = $True
         $Over80++
     }Else{
-        $Data = $Data + "<tr>" 
+        $Data = $Data + "<tr bgcolor=$BGColorGrey>" #able width='100%'><tbody>"
     }
     $Data = $Data + "<td  align='center'>$($ScopeId)</td>"
     $Data = $Data + "<td  align='center'>$($ScopeName)</td>"
@@ -263,10 +272,45 @@ foreach ($Scope in $SiteScopes ){
         $Data = $Data + "<td  align='center'><font color='green'>$($ScopeStatus)</td>"
     }
     
+    [int]$Percentage = [Int]$AddrPercent
+            
+    #--[ See https://www.w3schools.com/colors/colors_mixer.asp for color mix info ]--
+    If ($Percentage -gt 95){$BGColor = "#FF0000"}
+    If ($Percentage -le 95){$BGColor = "#ff4000"}
+    If ($Percentage -le 90){$BGColor = "#ff6600"}    
+    If ($Percentage -le 85){$BGColor = "#ef8300"}
+    If ($Percentage -le 80){$BGColor = "#e29a00"}
+    If ($Percentage -le 75){$BGColor = "#d9ab00"}
+    If ($Percentage -le 70){$BGColor = "#cfbc00"}
+    If ($Percentage -le 65){$BGColor = "#c9c800"}
+    If ($Percentage -le 60){$BGColor = "#c2d300"}    
+    If ($Percentage -le 55){$BGColor = "#bfd900"}
+    If ($Percentage -le 50){$BGColor = "#b2d100"}
+    If ($Percentage -le 45){$BGColor = "#a6c900"}
+    If ($Percentage -le 40){$BGColor = "#99c200"}
+    If ($Percentage -le 35){$BGColor = "#8cba00"}
+    If ($Percentage -le 30){$BGColor = "#80b200"}
+    If ($Percentage -le 25){$BGColor = "#73ab00"}
+    If ($Percentage -le 20){$BGColor = "#66a300"}
+    If ($Percentage -le 15){$BGColor = "#4c9400"}
+    If ($Percentage -le 10){$BGColor = "#338500"}
+    If ($Percentage -le 5) {$BGColor = "#1a7500"}
+    If ($Percentage -le 1) {$BGColor = "#006600"}
+
     $Data = $Data + "<td  align='center'>$($AddrTotal)</td>"
     $Data = $Data + "<td  align='center'>$($AddrInUse)</td>"
     $Data = $Data + "<td  align='center'>$($AddrFree)</td>"
-    $Data = $Data + "<td  align='center'>$($AddrPercent)</td>" 
+
+    If ($Percentage -ge 85){                                               
+        $Data = $Data + '<td bgcolor=' + $BGColorYel + '><font color=#ff0000><strong>' + $($AddrPercent) + ' %</strong></td>'       #--[ Add yellow on red if <20% volume percent free ]--
+    #}ElseIf ($Percentage -lt 85){                               
+    #    $RowData += '<td bgcolor=' + $BGColor + '><font color=#ffffff><strong>' + $Percentage + ' %</strong></td>'           #--[ Add yellow on red volume percent free ]--
+    }ElseIf ($Percentage -lt 10){                             
+        $Data = $Data + '<td bgcolor=' + $BGColor + '><font color=#ffffff><strong>' + $($AddrPercent) + ' %</strong></td>'           #--[ Add yellow on red volume percent free ]--
+    }Else{                                                               
+        $Data = $Data + '<td bgcolor=' + $BGColor + '><font color=#000000><strong>' + $($AddrPercent) + ' %</strong></td>'           #--[ Add volume percent free ]--
+    } 
+
     $Data = $Data + "<td  align='center'>$($ScopeStats.Reserved)</td>"
     $Data = $Data + "<td  align='center'>$($Scope.SubnetMask)</td>"
     $Data = $Data + "<td  align='center'>$($Scope.StartRange)</td>"
@@ -440,10 +484,11 @@ $Header = "
 "
 
 #--[ Report Header ]--
+# <tr bgcolor='#5a5dfa'>
 $Header = $Header +"
 <table border='0' width='100%'>
     <table border='0' width='100%'>
-        <tr bgcolor='#5a5dfa'>
+    <tr bgcolor='#03f0fc'>       
             <td colspan='7' height='25' align='center'><strong>
             <font color='#000000' size='4' face='tahoma'>DHCP Scope Statistics Report for $SiteServer&nbsp;&nbsp;&nbsp;&nbsp;</font>
             <font color='#000000' size='4' face='tahoma'> ($(Get-Date))</font>
@@ -453,12 +498,12 @@ $Header = $Header +"
 "
 $Header = $Header +"
 <table border='0' width='100%'>
-    <tr bgcolor='#CCCCCC'>
+    <tr bgcolor=$BGColorGrey>
         <td colspan='5' height='5' align='center'><strong><font color='#000000' size='2' face='tahoma'>
         <span style=background-color:#FFF284>WARNING</span> at 20% remaining. &nbsp;&nbsp;&nbsp;&nbsp; <span style=background-color:#FF0000>
         <font color=white>CRITICAL</font></span> at 5% remaining.</font>
     </tr>
-    <tr bgcolor='#CCCCCC'>
+    <tr bgcolor=$BGColorGrey>
         <td></td><strong>
 "        
 If ($Over80 -ge 1){
