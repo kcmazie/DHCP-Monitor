@@ -28,9 +28,15 @@
                    : v3.1 - 01-25-24 - Altered email send so it always goes out if over 80 or 95 %
                    : v3.2 - 05-21-24 - Added color gradiations for % used column.  Added generalized 
                    : grey background.
+                   : v4.0 - 07-12-24 - Fixed detection of failed purges.  Added new messaging on report
+                   : for failed purges as well as attching log files to the email.  Altered detection of
+                   : console verses IDE.  Shuffled order of operations to better report stats.  Tweaked
+                   : HTML report coloring.
                    :                  
 ==============================================================================#>
 Clear-Host
+
+$ScriptVer = "v4.0"
 
 if (!(Get-Module -Name "dhcpserver")) {
     Try{
@@ -53,27 +59,27 @@ $SendEmail = $False        #--[ Forces email to be sent ]--
 #$Credential = $host.ui.PromptForCredential("Encrypted credential file Not found:", "Please enter your Domain\UserName and Password.", "", "NetBiosUserName") 
 $DateTime = Get-Date -Format MM-dd-yyyy_HHmmss 
 
-Function GetConsoleHost {  #--[ Detect if we are using a script editor or the console ]--
-    $Console = $False
+Function GetConsoleHost ($ExtOption){  #--[ Detect if we are using a script editor or the console ]--
+    $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $False -force
     Switch ($Host.Name){
         'consolehost'{
-            Write-Host "PowerShell Console Detected"
-            $Console = $False
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $false -force
+            Write-Host "PowerShell Console detected. Output suppressed." -ForegroundColor Cyan
         }
         'Windows PowerShell ISE Host'{
-            Write-Host "PowerShell ISE Detected"
-            $Console = $True
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $True -force
+            Write-Host "PowerShell ISE editor detected." -ForegroundColor Cyan
         }
         'PrimalScriptHostImplementation'{
-            Write-Host "PrimalScript or PowerShell Studio Detected"
-            $Console = $True
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $True -force
+            Write-Host "PrimalScript or PowerShell Studio editor detected." -ForegroundColor Cyan
         }
         "Visual Studio Code Host" {
-            Write-Host "Visual Studio Code Detected"
-            $Console = $True
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $True -force
+            Write-Host "Visual Studio Code editor detected." -ForegroundColor Cyan
         }
     }
-    Return $Console
+    Return $ExtOption
 }
 
 Function StatusMsg ($Msg, $Color, $Console){
@@ -98,7 +104,7 @@ Function LoadConfig ($ConfigFile){  #--[ Read and load configuration file ]-----
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "DnsArray" -Value $Config.Settings.Update.DnsArray
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "NtpArray" -Value $Config.Settings.Update.NtpArray
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "DomainArray" -Value $Config.Settings.Update.DomainArray
-        $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "Console" -Value (GetConsoleHost)
+        $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "PurgeFail" -Value $false
     }Else{
         StatusMsg "MISSING XML CONFIG FILE.  File is required.  Script aborted..." " Red" $ExtOption.Console
         break;break;break
@@ -164,9 +170,23 @@ Function Repair ($ScopeID){
 
 #--[ End of Functions ]-------------------------------------
 
+#==[ Begin ]================================================
+
 #--[ Load external XML options file ]--
 $ConfigFile = $PSScriptRoot+"\"+($MyInvocation.MyCommand.Name.Split("_")[0]).Split(".")[0]+".xml"
 $ExtOption = LoadConfig $ConfigFile
+$ExtOption = GetConsoleHost $ExtOption
+
+$HexBlack = '#000000'
+$HexWhite = '#ffffff'
+$HexBlue = '#0000ff'
+$HexLtBlue = '#5a5dfa'
+$HexCyan = '#03f0fc'
+$HexLtGrey = '#CCCCCC'
+$HexDkGrey = '#646464'
+$HexYellow = '#FFF284'
+$HexRed = '#FF0000'
+$HexMaroon = '#a31818'
 
 If ($ExtOption.Console){
     Write-host "`n`n--[ Begin ]------------------------------------" -foregroundcolor Yellow
@@ -212,35 +232,31 @@ If ($Report){
     Add-Content -Path $ExtOption.SaveFile -Value "ScopeID,ScopeName,ScopeDescription,ScopeState,PercentUsed"
 }
 
-#--[ Collected Data to HTML Report Header ]--
-$Data = "<table border='3' width='100%'><tbody>
-    <tr bgcolor=black>    
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Scope ID</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Scope Name</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Scope Description</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Scope State</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Total Addr</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Addr In Use</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Addr Free</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >% In Use</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Reserved</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Subnet Mask</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Start of Range</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >End of Range</font></strong></td>
-    <td align='center'> <strong> <font color='white' size='2' face='tahoma' >Lease Duration</font></strong></td>
-    </tr>"
+#--[ HTML Report Header ]--
+$Data = '<table border="3" width="100%" ><tbody>
+    <tr bgcolor='+$HexDkGrey+'>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Scope ID</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Scope Name</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Scope Description</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Scope State</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Total Addr</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Addr In Use</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Addr Free</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >% In Use</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Reserved</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Subnet Mask</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Start of Range</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >End of Range</font></strong></td>
+    <td align="center"> <strong> <font color="white" size="2" face="tahoma" >Lease Duration</font></strong></td>
+    </tr>'
 
 #--[ Cycle through detected scopes ]--
 $Over80 = 0
 $Over95 = 0
 $Disabled = 0
-$BGColorGrey = "#dfdfdf"                                                #--[ Grey default cell background ]--
-$BGColorRed = "#ff0000"                                                 #--[ Red background for alerts ]-- 
-$BGColorOra = "#ff9900"                                                 #--[ Orange background for alerts ]-- 
-$BGColorYel = "#ffd900"                                                 #--[ Yellow background for alerts ]-- 
-$FGColor = "#000000"                                                    #--[ Black default cell foreground ]--
-
+$PurgeFailCount = 0
 foreach ($Scope in $SiteScopes ){
+    $PurgeFail = $False
     $ScopeID = $Scope.ScopeID.ipaddresstostring
     $ScopeName = $Scope.name
     $ScopeDescription = $Scope.Description
@@ -251,94 +267,28 @@ foreach ($Scope in $SiteScopes ){
     $AddrPercent = [int]$ScopeStats.PercentageInUse
     $AddrTotal = $AddrFree+$AddrInUse
     $Total = $Total+[int]$ScopeStats.InUse 
-    If ($AddrPercent -ge 95){
-        $Data = $Data + "<tr bgcolor=$BGColorRed><font color='yellow'><strong>" #able width='100%'><tbody>"
-        $SendEmail = $True
-        $Over95++
-    }ElseIf ($AddrPercent -ge 80){
-        $Data = $Data + "<tr bgcolor=$BGColorYel><strong>" #able width='100%'><tbody>"
-        $SendEmail = $True
-        $Over80++
-    }Else{
-        $Data = $Data + "<tr bgcolor=$BGColorGrey>" #able width='100%'><tbody>"
-    }
-    $Data = $Data + "<td  align='center'>$($ScopeId)</td>"
-    $Data = $Data + "<td  align='center'>$($ScopeName)</td>"
-    $Data = $Data + "<td  align='center'>$($ScopeDescription)</td>"
-    If ($ScopeStatus -eq "Inactive"){
-        $Data = $Data + "<td align='center'><font color='#a31818'><strong>$($ScopeStatus)</td>"
-        $Disabled++
-    }Else{
-        $Data = $Data + "<td  align='center'><font color='green'>$($ScopeStatus)</td>"
-    }
-    
-    [int]$Percentage = [Int]$AddrPercent
-            
-    #--[ See https://www.w3schools.com/colors/colors_mixer.asp for color mix info ]--
-    If ($Percentage -gt 95){$BGColor = "#FF0000"}
-    If ($Percentage -le 95){$BGColor = "#ff4000"}
-    If ($Percentage -le 90){$BGColor = "#ff6600"}    
-    If ($Percentage -le 85){$BGColor = "#ef8300"}
-    If ($Percentage -le 80){$BGColor = "#e29a00"}
-    If ($Percentage -le 75){$BGColor = "#d9ab00"}
-    If ($Percentage -le 70){$BGColor = "#cfbc00"}
-    If ($Percentage -le 65){$BGColor = "#c9c800"}
-    If ($Percentage -le 60){$BGColor = "#c2d300"}    
-    If ($Percentage -le 55){$BGColor = "#bfd900"}
-    If ($Percentage -le 50){$BGColor = "#b2d100"}
-    If ($Percentage -le 45){$BGColor = "#a6c900"}
-    If ($Percentage -le 40){$BGColor = "#99c200"}
-    If ($Percentage -le 35){$BGColor = "#8cba00"}
-    If ($Percentage -le 30){$BGColor = "#80b200"}
-    If ($Percentage -le 25){$BGColor = "#73ab00"}
-    If ($Percentage -le 20){$BGColor = "#66a300"}
-    If ($Percentage -le 15){$BGColor = "#4c9400"}
-    If ($Percentage -le 10){$BGColor = "#338500"}
-    If ($Percentage -le 5) {$BGColor = "#1a7500"}
-    If ($Percentage -le 1) {$BGColor = "#006600"}
-
-    $Data = $Data + "<td  align='center'>$($AddrTotal)</td>"
-    $Data = $Data + "<td  align='center'>$($AddrInUse)</td>"
-    $Data = $Data + "<td  align='center'>$($AddrFree)</td>"
-
-    If ($Percentage -ge 85){                                               
-        $Data = $Data + '<td bgcolor=' + $BGColorYel + '><font color=#ff0000><strong>' + $($AddrPercent) + ' %</strong></td>'       #--[ Add yellow on red if <20% volume percent free ]--
-    #}ElseIf ($Percentage -lt 85){                               
-    #    $RowData += '<td bgcolor=' + $BGColor + '><font color=#ffffff><strong>' + $Percentage + ' %</strong></td>'           #--[ Add yellow on red volume percent free ]--
-    }ElseIf ($Percentage -lt 10){                             
-        $Data = $Data + '<td bgcolor=' + $BGColor + '><font color=#ffffff><strong>' + $($AddrPercent) + ' %</strong></td>'           #--[ Add yellow on red volume percent free ]--
-    }Else{                                                               
-        $Data = $Data + '<td bgcolor=' + $BGColor + '><font color=#000000><strong>' + $($AddrPercent) + ' %</strong></td>'           #--[ Add volume percent free ]--
-    } 
-
-    $Data = $Data + "<td  align='center'>$($ScopeStats.Reserved)</td>"
-    $Data = $Data + "<td  align='center'>$($Scope.SubnetMask)</td>"
-    $Data = $Data + "<td  align='center'>$($Scope.StartRange)</td>"
-    $Data = $Data + "<td align='center'>$($Scope.EndRange)</td>"
-    $Data = $Data + "<td align='center'>$($Scope.LeaseDuration)</td>"
-    $Data = $Data + "</tr>"     
 
     If ($ExtOption.Console){  #--[ Display running results if console is enabled ]--
-        write-host `n"      Scope ID : " -ForegroundColor Yellow -NoNewline
-        write-host $ScopeID"   " -ForegroundColor White
-        write-host "   Scope Name  : " -ForegroundColor Yellow -NoNewline
+        write-host `n"        Scope ID : " -ForegroundColor Yellow -NoNewline
+        write-host $ScopeID"   " -ForegroundColor White        
+        write-host "     Scope Name  : " -ForegroundColor Yellow -NoNewline
         Write-host $ScopeName -ForegroundColor White
-        write-host "  Description  : " -ForegroundColor Yellow -NoNewline
+        write-host "    Description  : " -ForegroundColor Yellow -NoNewline       
         Write-host $ScopeDescription -ForegroundColor White
-        write-host " Scope Status  : " -ForegroundColor Yellow -NoNewline
+        write-host "   Scope Status  : " -ForegroundColor Yellow -NoNewline
         If ($ScopeStatus -like "*inactive*"){
             Write-host $ScopeStatus"   " -ForegroundColor Red
         }Else{
             Write-host $ScopeStatus"   " -ForegroundColor Green
         }
-        write-host "   Statistics  : " -ForegroundColor Yellow -NoNewline
+        write-host "     Statistics  : " -ForegroundColor Yellow -NoNewline
         write-host "Total Addr  ="$AddrTotal -ForegroundColor white
-        write-host "                 Addr In Use ="$AddrInUse -ForegroundColor white
-        write-host "                 Addr Free   ="$AddrFree -ForegroundColor White 
+        write-host "                   Addr In Use ="$AddrInUse -ForegroundColor white
+        write-host "                   Addr Free   ="$AddrFree -ForegroundColor White 
         If ($AddrPercent -gt 90){
-            write-host "                 % In Use    = " -NoNewline
+            write-host "                   % In Use    = " -NoNewline
             Write-host $AddrPercent -ForegroundColor White -NoNewline
-            write-host "                 % Free      = " -NoNewline
+            write-host "                   % Free      = " -NoNewline
             Write-host (100-$addrPercent) -ForegroundColor Red 
             If ($Reconcile){
                 Write-host "  -- Reconciling Scope --" -forground -ForegroundColor Magenta
@@ -347,12 +297,12 @@ foreach ($Scope in $SiteScopes ){
                 Write-host " "
             }
         }Else{
-            write-host "                 % In Use    = " -NoNewline
+            write-host "                   % In Use    = " -NoNewline
             Write-host $AddrPercent -ForegroundColor White 
-            write-host "                 % Free      = " -NoNewline
+            write-host "                   % Free      = " -NoNewline
             Write-host (100-$addrPercent) -ForegroundColor Green 
         }
-        write-host "Lease Duration : " -ForegroundColor Yellow -NoNewline
+        write-host "  Lease Duration : " -ForegroundColor Yellow -NoNewline
         [string]$lease = $Scope.LeaseDuration
 
         If($Lease -like "*.*"){
@@ -366,8 +316,11 @@ foreach ($Scope in $SiteScopes ){
         $Sec = [String]$Lease.Split(":")[2]
         Write-host "$Days (Days)   $Hours (Hours)   $Min  (Min)   $Sec  (Sec)" -ForegroundColor White
     }
-    
+
     If ($Purge){
+        If ($ExtOption.Console){
+            Write-Host "                 -- Bad Lease Purge Enabled ---" -ForegroundColor Cyan 
+        }
         $LeaseInfo = Get-dhcpserverv4lease -ScopeId $ScopeID  | Select-object Ipaddress,addressstate,clientid,hostname,leaseexpirytime
         ForEach ($Item in $LeaseInfo){
             If ($Item.ClientID.Length -gt 26){
@@ -375,23 +328,33 @@ foreach ($Scope in $SiteScopes ){
                 $Ping = New-Object System.Net.NetworkInformation.Ping
                 $Response = $Ping.Send($Item.Ipaddress,$Timeout)
                 If ($Response.Status -eq "Success"){
-                    write-host $Item.Ipaddress -ForegroundColor Green -NoNewline
-                    write-host "    "$Item.clientid
+                    If ($ExtOption.Console){
+                        write-host "  --"$Item.Ipaddress"Is Alive." -ForegroundColor Green -NoNewline
+                        write-host "    ("$Item.clientid")`n"
+                    }
                 }Else{   
-                    $SendEmail = $true                 
+                    $SendEmail = $true               
                     Try{
-                        Remove-DhcpServerv4Lease -ScopeId $ScopeID -ClientId $Item.clientid -confirm:$false #-whatif
+                        Remove-DhcpServerv4Lease -ScopeId $ScopeID -ClientId $Item.clientid -confirm:$false -ErrorAction:Stop  #-whatif
                         $Msg = 'Deleted lease: "'+$Item.Ipaddress+'" to: "'+$Item.clientID+'" from scope: "'+$ScopeDescription
                         Add-Content -Path $ExtOption.PurgeFile -Value $Msg
-                        $Message = $Message + $Msg +"</br>"
-                        write-host $Item.Ipaddress -ForegroundColor red -NoNewline
-                        write-host "    "$Item.clientid
+                        If ($ExtOption.Console){
+                            write-host $Item.Ipaddress -ForegroundColor red -NoNewline
+                            write-host "    "$Item.clientid
+                        }
                     }Catch{
                         $ErrorMessage = $_.Exception.Message
                         $FailedItem = $_.Exception.ItemName
-                        $Message = $Message + $ErrorMessage +"</br>"
-                        write-host $errormessage -ForegroundColor yellow
-                        write-host $FailedItem -ForegroundColor yellow
+                        $PurgeFail = $True
+                        $PurgeFailCount++
+                        $Msg = 'FAILED to delete lease: "'+$Item.Ipaddress+'" to: "'+$Item.clientID+'" from scope: "'+$ScopeDescription
+                        Add-Content -Path $ExtOption.PurgeFile -Value $Msg
+                        $ErrorMAC = $ErrorMessage.Split(" ")[4]
+                        If ($ExtOption.Console){
+                            Write-Host "  -- Failed to delete IP lease for"$ErrorMAC -ForegroundColor Yellow
+                            #write-host $ErrorMessage -ForegroundColor yellow
+                            write-host $FailedItem -ForegroundColor cyan
+                        }
                     }
                 }
             }
@@ -427,8 +390,8 @@ foreach ($Scope in $SiteScopes ){
             StatusMsg $Msg "Cyan" $ExtOption.Console
         } #>
 
-        #==[ Description Update ]========================================================
-        #--[ Forces description to match scope name ]--
+        #==[ Description Update (Forces description to match scope name) ]===========================================
+        #--[  ]--
         Set-DhcpServerv4Scope -ScopeId $ScopeID -Description $ScopeName -whatif
         $Msg = "               : Updating Description..."
         StatusMsg $Msg "Cyan" $ExtOption.Console
@@ -453,11 +416,50 @@ foreach ($Scope in $SiteScopes ){
             Detect2 $Value $ScopeID $VendorClass        
         } #>
     }
+    If ($AddrPercent -ge 95){
+        $Data = $Data + '<tr bgcolor='+$HexRed+'><font color='+$HexYellow+'><strong>'
+        $SendEmail = $True
+        $Over95++
+    }ElseIf ($AddrPercent -ge 80){
+        $Data = $Data + '<tr bgcolor='+$HexYellow+'><strong>' 
+        $SendEmail = $True
+        $Over80++
+    }Else{
+        $Data = $Data + '<tr bgcolor='+$HexLtGrey+'>'
+    }
+    $Data = $Data + "<td  align='center'>$($ScopeId)</td>"
+    If ($PurgeFail){
+        $Data = $Data + "<td  align='center'><span style=background-color:$HexRed>
+        <font color=$HexYellow>$($ScopeName)</Font></td>"
+    }Else{
+        $Data = $Data + "<td  align='center'><span style=background-color:$HexLtGrey>
+        <font color=$HexBlack>$($ScopeName)</Font></td>"
+    }    
+    $Data = $Data + "<td  align='center'>$($ScopeDescription)</td>"
+    If ($ScopeStatus -eq "Inactive"){
+        $Data = $Data + "<td align='center'><font color='$HexMaroon'><strong>$($ScopeStatus)</td>"
+        $Disabled++
+    }Else{
+        $Data = $Data + "<td  align='center'><font color='$HexGreen'>$($ScopeStatus)</td>"
+    }
+    
+    $Data = $Data + "<td  align='center'>$($AddrTotal)</td>"
+    $Data = $Data + "<td  align='center'>$($AddrInUse)</td>"
+    $Data = $Data + "<td  align='center'>$($AddrFree)</td>"
+    $Data = $Data + "<td  align='center'>$($AddrPercent)</td>" 
+    $Data = $Data + "<td  align='center'>$($ScopeStats.Reserved)</td>"
+    $Data = $Data + "<td  align='center'>$($Scope.SubnetMask)</td>"
+    $Data = $Data + "<td  align='center'>$($Scope.StartRange)</td>"
+    $Data = $Data + "<td align='center'>$($Scope.EndRange)</td>"
+    $Data = $Data + "<td align='center'>$($Scope.LeaseDuration)</td>"
+    $Data = $Data + "</tr>"     
 }
-$Data = $Data + "</table></table></body></html>"
+$Data = $Data + "</table></table>
+Script Version: "+$ScriptVer+" 
+</body></html>"
 
-#--[ HTML Header ]--
-$Header = "
+#--[ HTML Header ]-----------------------------------------------------
+$HTMLHeader = "
 <html>
     <head>
         <meta http-equiv='Content-Type' content='text/html; charset=iso-8859-1'>
@@ -477,59 +479,80 @@ $Header = "
                 border: 1px solid black;
                 border-collapse: collapse;
             }
+            tr#one {
+              background:black;
+              border: 6px solid white;
+              border-collapse: collapse;
+            }
         </style>
     </head>
 <body>
 <table-layout: fixed>
 "
 
-#--[ Report Header ]--
-# <tr bgcolor='#5a5dfa'>
-$Header = $Header +"
+#--[ Report Header ]------------------------------------------------------
+$ReportHeader = "
 <table border='0' width='100%'>
     <table border='0' width='100%'>
-    <tr bgcolor='#03f0fc'>       
+    <tr bgcolor=$HexBlue>       
             <td colspan='7' height='25' align='center'><strong>
-            <font color='#000000' size='4' face='tahoma'>DHCP Scope Statistics Report for $SiteServer&nbsp;&nbsp;&nbsp;&nbsp;</font>
-            <font color='#000000' size='4' face='tahoma'> ($(Get-Date))</font>
-            <font color='#000000' size='2' face='tahoma'> <BR>Total Scope Count = $ScopeCount</font>
+            <font color=$HexWhite size='4' face='tahoma'>DHCP Scope Statistics Report for $SiteServer&nbsp;&nbsp;&nbsp;&nbsp;</font>
+            <font color=$HexWhite size='4' face='tahoma'> ($(Get-Date))</font>
+            <font color=$HexWhite size='2' face='tahoma'> <BR>Total Scope Count = $ScopeCount</font>
         </tr>
     </table>
-"
-$Header = $Header +"
+
 <table border='0' width='100%'>
-    <tr bgcolor=$BGColorGrey>
-        <td colspan='5' height='5' align='center'><strong><font color='#000000' size='2' face='tahoma'>
-        <span style=background-color:#FFF284>WARNING</span> at 20% remaining. &nbsp;&nbsp;&nbsp;&nbsp; <span style=background-color:#FF0000>
-        <font color=white>CRITICAL</font></span> at 5% remaining.</font>
+    <tr bgcolor=$HexLtGrey>
+        <td colspan='5' height='5' align='center'><font color=$HexBlack size='2' face='tahoma'>
+        <span style=background-color:$HexYellow>WARNING</span> at 20% remaining. &nbsp;&nbsp;&nbsp;&nbsp; <span style=background-color:$HexRed>
+        <font color=$HexWhite>CRITICAL</font></span> at 5% remaining.</font>
     </tr>
-    <tr bgcolor=$BGColorGrey>
-        <td></td><strong>
+    <tr bgcolor=$HexLtGrey>
+         <td colspan='5' height='5' align='center'><strong><font color=$HexBlack size='2' face='tahoma'>Current System State:</td><strong>
+    </tr>
+    <tr bgcolor=$HexLtGrey><td></td>
 "        
 If ($Over80 -ge 1){
     $SendEmail = $True
-    $Header = $Header +"<td width='20%' height='5' align='center'><span style=background-color:#FFF284>$Over80 scopes are over 80%</span></td>"
+    $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'><span style=background-color:$HexYellow>$Over80 scopes are over 80%</span></td>"
 }Else{
-    $Header = $Header +"<td width='20%' height='5' align='center'>$Over80 scopes are over 80%</td>"
+    $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'>$Over80 scopes are over 80%</td>"
 }
 If ($Over95 -ge 1){
     $SendEmail = $true
-    $Header = $Header +"<td width='20%' height='5' align='center'><span style=background-color:#FF0000>
-    <font color=white>$Over95 scopes are over 95%</span></font></td>"
+    $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'><span style=background-color:$HexRed>
+    <font color=$HexWhite>$Over95 scopes are over 95%</span></font></td>"
 }Else{
-    $Header = $Header +"<td width='20%' height='5' align='center'>$Over95 scopes are over 95%</td>"
+    $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'>$Over95 scopes are over 95%</td>"
 }
-$Header = $Header +"
+$ReportHeader = $ReportHeader +"
         <td width='20%' height='5' align='center'>$Disabled scopes are disabled. </td>
         <td></td></strong>
-    </tr>
-</table>
-"
-$Report = $Header+$Data
+    </tr>"
+If ($PurgeFailCount -gt 0){
+    $ReportHeader = $ReportHeader +"<tr bgcolor=$HexLtGrey>
+         <td colspan='5' height='5' align='center'><strong><font color=$HexYellow size='2' face='tahoma'>
+         <span style=background-color:$HexRed>
+         WARNING: Invalid MAC addresses were detected in the DHCP databse and automatic cleanup has failed.&nbsp;&nbsp;Scope name(s) highlighted below.
+         <strong></td>
+    </tr>    
+    </table>"
+}Else{
+    $ReportHeader = $ReportHeader +"</table>"
+}
 
-#--[ Constructs and sends the email ]--
+#--[ Assemble Final Report file ]----------------------------------
+$Report = $HTMLHeader+$ReportHeader+$Data+ "</table></body></html>"
+#------------------------------------------------------------------
+
+#--[ Construct and send the email ]--
 $Smtp = New-Object Net.Mail.SmtpClient($ExtOption.SmtpServer,25)    
 $Email = New-Object System.Net.Mail.MailMessage  
+If (Test-Path -path $ExtOption.SaveFile){
+    $Attachment = New-Object System.Net.Mail.Attachment($ExtOption.SaveFile, 'text/plain')
+    $Email.Attachments.Add($attachment)
+}
 If (Test-Path -path $ExtOption.PurgeFile){
     $Attachment = New-Object System.Net.Mail.Attachment($ExtOption.PurgeFile, 'text/plain')
     $Email.Attachments.Add($attachment)
@@ -538,10 +561,12 @@ $Email.IsBodyHTML = $true
 $Email.From = $ExtOption.Sender
 
 If(((get-date).DayOfWeek -eq "Sunday") -or ($SendEmail)){  #--[ Sends to main recipient only on Sunday or if needed ]--
-    $Email.To.Add($ExtOption.Recipient0) 
+    $Email.To.Add($ExtOption.Recipient0)      
+#    $Email.To.Add($ExtOption.Recipient1) 
 }Else{
     $Email.To.Add($ExtOption.Recipient1)   #--[ Always send to additional recipients for daily status ]--
 #    $Email.To.Add($ExtOption.Recipient2)  
+#    $Email.To.Add($ExtOption.Recipient3)  
 }
 If ($Over95 -gt 0){
     $Email.Subject = "DHCP Status ALERT"
