@@ -64,7 +64,7 @@ Function GetConsoleHost ($ExtOption){  #--[ Detect if we are using a script edit
     $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $False -force
     Switch ($Host.Name){
         'consolehost'{
-            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $true -force #false -force
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $false -force
             Write-Host "PowerShell Console detected. Output suppressed." -ForegroundColor Cyan
         }
         'Windows PowerShell ISE Host'{
