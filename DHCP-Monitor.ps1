@@ -21,17 +21,18 @@
                    : https://github.com/n2501r/spiderzebra/blob/master/PowerShell/DHCP_Scope_Report.ps1
                    : 
     Last Update by : Kenneth C. Mazie                                           
-   Version History : v1.0 - 08-16-22 - Original 
-    Change History : v2.0 - 09-00-23 - Numerous operational & bug fixes
-                   : v2.1 - 12-15-23 - Adjusted email options, report format, other minor bugs.
-                   : v3.0 - 12-25-23 - Relocated private settings out to external config for publishing. 
-                   : v3.1 - 01-25-24 - Altered email send so it always goes out if over 80 or 95 %
-                   : v3.2 - 05-21-24 - Added color gradiations for % used column.  Added generalized 
-                   : grey background.
-                   : v4.0 - 07-12-24 - Fixed detection of failed purges.  Added new messaging on report
-                   : for failed purges as well as attching log files to the email.  Altered detection of
-                   : console verses IDE.  Shuffled order of operations to better report stats.  Tweaked
-                   : HTML report coloring.
+   Version History : v1.00 - 08-16-22 - Original 
+    Change History : v2.00 - 09-00-23 - Numerous operational & bug fixes
+                   : v2.10 - 12-15-23 - Adjusted email options, report format, other minor bugs.
+                   : v3.00 - 12-25-23 - Relocated private settings out to external config for publishing. 
+                   : v3.10 - 01-25-24 - Altered email send so it always goes out if over 80 or 95 %
+                   : v3.20 - 05-21-24 - Added color gradiations for % used column.  Added generalized 
+                   :                    grey background.
+                   : v4.00 - 07-12-24 - Fixed detection of failed purges.  Added new messaging on report
+                   :                    for failed purges as well as attching log files to the email.  
+                   :                    Altered detection of console verses IDE.  Shuffled order of 
+                   :                    operations to better report stats.  Tweaked HTML report coloring.
+                   : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly remove after v3.0
                    :                  
 ==============================================================================#>
 Clear-Host
@@ -63,7 +64,7 @@ Function GetConsoleHost ($ExtOption){  #--[ Detect if we are using a script edit
     $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $False -force
     Switch ($Host.Name){
         'consolehost'{
-            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $false -force
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $true -force #false -force
             Write-Host "PowerShell Console detected. Output suppressed." -ForegroundColor Cyan
         }
         'Windows PowerShell ISE Host'{
@@ -187,6 +188,7 @@ $HexDkGrey = '#646464'
 $HexYellow = '#FFF284'
 $HexRed = '#FF0000'
 $HexMaroon = '#a31818'
+$HexGreen = '#006600'
 
 If ($ExtOption.Console){
     Write-host "`n`n--[ Begin ]------------------------------------" -foregroundcolor Yellow
@@ -446,7 +448,42 @@ foreach ($Scope in $SiteScopes ){
     $Data = $Data + "<td  align='center'>$($AddrTotal)</td>"
     $Data = $Data + "<td  align='center'>$($AddrInUse)</td>"
     $Data = $Data + "<td  align='center'>$($AddrFree)</td>"
-    $Data = $Data + "<td  align='center'>$($AddrPercent)</td>" 
+
+    [int]$Percentage = [Int]$AddrPercent
+            
+    #--[ See https://www.w3schools.com/colors/colors_mixer.asp for color mix info ]--
+    If ($Percentage -gt 95){$BGColor = "#FF0000"}
+    If ($Percentage -le 95){$BGColor = "#ff4000"}
+    If ($Percentage -le 90){$BGColor = "#ff6600"}    
+    If ($Percentage -le 85){$BGColor = "#ef8300"}
+    If ($Percentage -le 80){$BGColor = "#e29a00"}
+    If ($Percentage -le 75){$BGColor = "#d9ab00"}
+    If ($Percentage -le 70){$BGColor = "#cfbc00"}
+    If ($Percentage -le 65){$BGColor = "#c9c800"}
+    If ($Percentage -le 60){$BGColor = "#c2d300"}    
+    If ($Percentage -le 55){$BGColor = "#bfd900"}
+    If ($Percentage -le 50){$BGColor = "#b2d100"}
+    If ($Percentage -le 45){$BGColor = "#a6c900"}
+    If ($Percentage -le 40){$BGColor = "#99c200"}
+    If ($Percentage -le 35){$BGColor = "#8cba00"}
+    If ($Percentage -le 30){$BGColor = "#80b200"}
+    If ($Percentage -le 25){$BGColor = "#73ab00"}
+    If ($Percentage -le 20){$BGColor = "#66a300"}
+    If ($Percentage -le 15){$BGColor = "#4c9400"}
+    If ($Percentage -le 10){$BGColor = "#338500"}
+    If ($Percentage -le 5) {$BGColor = "#1a7500"}
+    If ($Percentage -le 1) {$BGColor = "#006600"}
+
+    If ($Percentage -ge 85){                                               
+        $Data = $Data += '<td bgcolor=' + $BGColorYel + '><font color=#ff0000><strong>' + $Percentage + ' %</strong></td>'       #--[ Add yellow on red if <20% volume percent free ]--
+    #}ElseIf ($Percentage -lt 85){
+    # $RowData += '<td bgcolor=' + $BGColor + '><font color=#ffffff><strong>' + $Percentage + ' %</strong></td>' #--[ Add yellow on red volume percent free ]--
+    }ElseIf ($Percentage -lt 10){                             
+        $Data = $Data + '<td bgcolor=' + $BGColor + '><font color=#ffffff><strong>' + $Percentage + ' %</strong></td>'           #--[ Add yellow on red volume percent free ]--
+    }Else{                                                               
+        $Data = $Data += '<td bgcolor=' + $BGColor + '><font color=#000000><strong>' + $Percentage + ' %</strong></td>'           #--[ Add volume percent free ]--
+    }    
+
     $Data = $Data + "<td  align='center'>$($ScopeStats.Reserved)</td>"
     $Data = $Data + "<td  align='center'>$($Scope.SubnetMask)</td>"
     $Data = $Data + "<td  align='center'>$($Scope.StartRange)</td>"
@@ -494,11 +531,11 @@ $HTMLHeader = "
 $ReportHeader = "
 <table border='0' width='100%'>
     <table border='0' width='100%'>
-    <tr bgcolor=$HexBlue>       
+    <tr bgcolor=$HexCyan>       
             <td colspan='7' height='25' align='center'><strong>
-            <font color=$HexWhite size='4' face='tahoma'>DHCP Scope Statistics Report for $SiteServer&nbsp;&nbsp;&nbsp;&nbsp;</font>
-            <font color=$HexWhite size='4' face='tahoma'> ($(Get-Date))</font>
-            <font color=$HexWhite size='2' face='tahoma'> <BR>Total Scope Count = $ScopeCount</font>
+            <font color=$HexBlack size='4' face='tahoma'>DHCP Scope Statistics Report for $SiteServer&nbsp;&nbsp;&nbsp;&nbsp;</font>
+            <font color=$HexBlack size='4' face='tahoma'> ($(Get-Date))</font>
+            <font color=$HexBlack size='2' face='tahoma'> <BR>Total Scope Count = $ScopeCount</font>
         </tr>
     </table>
 
