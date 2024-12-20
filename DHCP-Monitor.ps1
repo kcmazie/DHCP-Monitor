@@ -33,12 +33,11 @@
                    :                    Altered detection of console verses IDE.  Shuffled order of 
                    :                    operations to better report stats.  Tweaked HTML report coloring.
                    : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly remove after v3.0
-                   #>$ScriptVer = "v4.10"<#
+                   : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
+                   #>$ScriptVer = "v4.20"<#
                    :                  
 ==============================================================================#>
 Clear-Host
-
-$ScriptVer = "v4.0"
 
 if (!(Get-Module -Name "dhcpserver")) {
     Try{
@@ -65,7 +64,7 @@ Function GetConsoleHost ($ExtOption){  #--[ Detect if we are using a script edit
     $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $False -force
     Switch ($Host.Name){
         'consolehost'{
-            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $false -force
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $true -force
             Write-Host "PowerShell Console detected. Output suppressed." -ForegroundColor Cyan
         }
         'Windows PowerShell ISE Host'{
@@ -528,7 +527,8 @@ $HTMLHeader = "
 <table-layout: fixed>
 "
 
-#--[ Report Header ]------------------------------------------------------
+#--[ Report Headers ]------------------------------------------------------
+#--[ HTML title bar ]--
 $ReportHeader = "
 <table border='0' width='100%'>
     <table border='0' width='100%'>
@@ -538,14 +538,14 @@ $ReportHeader = "
             <font color=$HexBlack size='4' face='tahoma'> ($(Get-Date))</font>
             <font color=$HexBlack size='2' face='tahoma'> <BR>Total Scope Count = $ScopeCount</font>
         </tr>
-    </table>
+    </table>"
 
+#--[ Black bar ]--    
+$ReportHeader = $ReportHeader +"<table bgcolor='black' border='0' width='100%'></table>"
+
+#--[ HTML Current state bar ]--    
+$ReportHeader = $ReportHeader +"
 <table border='0' width='100%'>
-    <tr bgcolor=$HexLtGrey>
-        <td colspan='5' height='5' align='center'><font color=$HexBlack size='2' face='tahoma'>
-        <span style=background-color:$HexYellow>WARNING</span> at 20% remaining. &nbsp;&nbsp;&nbsp;&nbsp; <span style=background-color:$HexRed>
-        <font color=$HexWhite>CRITICAL</font></span> at 5% remaining.</font>
-    </tr>
     <tr bgcolor=$HexLtGrey>
          <td colspan='5' height='5' align='center'><strong><font color=$HexBlack size='2' face='tahoma'>Current System State:</td><strong>
     </tr>
@@ -557,6 +557,7 @@ If ($Over80 -ge 1){
 }Else{
     $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'>$Over80 scopes are over 80%</td>"
 }
+
 If ($Over95 -ge 1){
     $SendEmail = $true
     $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'><span style=background-color:$HexRed>
@@ -564,9 +565,15 @@ If ($Over95 -ge 1){
 }Else{
     $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'>$Over95 scopes are over 95%</td>"
 }
+
 $ReportHeader = $ReportHeader +"
         <td width='20%' height='5' align='center'>$Disabled scopes are disabled. </td>
         <td></td></strong>
+    </tr>
+        <tr bgcolor=$HexLtGrey>
+        <td colspan='5' height='5' align='center'><font color=$HexBlack size='2' face='tahoma'>
+        <span style=background-color:$HexYellow>WARNING</span> is flagged at 20% remaining. &nbsp;&nbsp;&nbsp;&nbsp; <span style=background-color:$HexRed>
+        <font color=$HexWhite>CRITICAL</font></span> is flagged at 5% remaining.</font>
     </tr>"
 If ($PurgeFailCount -gt 0){
     $ReportHeader = $ReportHeader +"<tr bgcolor=$HexLtGrey>
@@ -579,6 +586,9 @@ If ($PurgeFailCount -gt 0){
 }Else{
     $ReportHeader = $ReportHeader +"</table>"
 }
+
+#--[ Black bar ]--
+$ReportHeader = $ReportHeader + "<table bgcolor='black' border='0' width='100%'></table>"
 
 #--[ Assemble Final Report file ]----------------------------------
 $Report = $HTMLHeader+$ReportHeader+$Data+ "</table></body></html>"
