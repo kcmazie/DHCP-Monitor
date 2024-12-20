@@ -33,6 +33,7 @@
                    :                    Altered detection of console verses IDE.  Shuffled order of 
                    :                    operations to better report stats.  Tweaked HTML report coloring.
                    : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly removed after v3.0
-                   #>$ScriptVer = "v4.10"<#
+                   : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
+                   #>$ScriptVer = "v4.20"<#
                    :                  
 ==============================================================================#>
