@@ -34,7 +34,8 @@
                    :                    operations to better report stats.  Tweaked HTML report coloring.
                    : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly remove after v3.0
                    : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
-                   #>$ScriptVer = "v4.20"<#
+                   : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
+                   #>$ScriptVer = "v4.21"<#
                    :                  
 ==============================================================================#>
 Clear-Host
@@ -571,9 +572,9 @@ $ReportHeader = $ReportHeader +"
         <td></td></strong>
     </tr>
         <tr bgcolor=$HexLtGrey>
-        <td colspan='5' height='5' align='center'><font color=$HexBlack size='2' face='tahoma'>
-        <span style=background-color:$HexYellow>WARNING</span> is flagged at 20% remaining. &nbsp;&nbsp;&nbsp;&nbsp; <span style=background-color:$HexRed>
-        <font color=$HexWhite>CRITICAL</font></span> is flagged at 5% remaining.</font>
+        <td colspan='5' height='5' align='center'><font color=$HexBlack size='2' face='tahoma'>Scopes over 80% in use are flagged as 
+        <span style=background-color:$HexYellow>WARNINGS</span>. &nbsp;&nbsp;&nbsp;&nbsp;Scopes over 95% in use are flagged as
+        <span style=background-color:$HexRed><font color=$HexWhite>CRITICALS</font></span>.</font>
     </tr>"
 If ($PurgeFailCount -gt 0){
     $ReportHeader = $ReportHeader +"<tr bgcolor=$HexLtGrey>
