@@ -34,6 +34,7 @@
                    :                    operations to better report stats.  Tweaked HTML report coloring.
                    : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly removed after v3.0
                    : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
-                   #>$ScriptVer = "v4.20"<#
+                   : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
+                   #>$ScriptVer = "v4.21"<#
                    :                  
 ==============================================================================#>
