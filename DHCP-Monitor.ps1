@@ -35,7 +35,8 @@
                    : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly remove after v3.0
                    : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
                    : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
-                   #>$ScriptVer = "v4.21"<#
+                   : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.  Added debug option.
+                   #>$ScriptVer = "v4.22"<#
                    :                  
 ==============================================================================#>
 Clear-Host
@@ -56,6 +57,7 @@ $RunUpdate = $false        #--[ Apply new settings to selected scopes. ]--
 $Reconcile = $false        #--[ If set to $true will reconcile any scope found to be over 90% utilized ]--
 $Purge = $true             #--[ Will detect reservations with unique IDs longer than 26 characters and remove them ]-- 
 $SendEmail = $False        #--[ Forces email to be sent ]--
+$Debug = $False            #--[ When set to true this stops the log from generating when doing repeated testing ]-- 
 #--[ If all are set to $false detected stats are displayed to screen and nothing else is done unless any scope is over 80% ]--
 
 #$Credential = $host.ui.PromptForCredential("Encrypted credential file Not found:", "Please enter your Domain\UserName and Password.", "", "NetBiosUserName") 
@@ -107,6 +109,7 @@ Function LoadConfig ($ConfigFile){  #--[ Read and load configuration file ]-----
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "NtpArray" -Value $Config.Settings.Update.NtpArray
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "DomainArray" -Value $Config.Settings.Update.DomainArray
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "PurgeFail" -Value $false
+        $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "Debug" -Value $False
     }Else{
         StatusMsg "MISSING XML CONFIG FILE.  File is required.  Script aborted..." " Red" $ExtOption.Console
         break;break;break
@@ -132,7 +135,6 @@ Function Detect1 ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray){
             Write-host '        '$Option' '$Count' : '$Item
         }Else{
             Write-host '        '$Option' '$Count' : '$Item
-            #StatusMsg $Msg "Red" $ExtOption.Console
             $Update = $true
         }
         $Count++
@@ -176,6 +178,9 @@ Function Repair ($ScopeID){
 
 #--[ Load external XML options file ]--
 $ConfigFile = $PSScriptRoot+"\"+($MyInvocation.MyCommand.Name.Split("_")[0]).Split(".")[0]+".xml"
+#$ConfigFile = $PSScriptRoot+"\"+$MyInvocation.MyCommand.Name+".xml"
+#--[ Note: The above line strips off anything after an underscore so that script copies will use a common config file.        ]--        
+#--[       This is handy when creating copies of the working script for testing.  To disable, use the commented line instead. ]--
 $ExtOption = LoadConfig $ConfigFile
 $ExtOption = GetConsoleHost $ExtOption
 
@@ -191,15 +196,17 @@ $HexRed = '#FF0000'
 $HexMaroon = '#a31818'
 $HexGreen = '#006600'
 
-If ($ExtOption.Console){
-    Write-host "`n`n--[ Begin ]------------------------------------" -foregroundcolor Yellow
-}
 $Total = 0
 $SiteServer = (Get-DhcpServerInDC).DnsName | Where-Object {$_.SubString(0,3) -eq $ExtOption.SiteServerPrefix}
 
 If ($ExtOption.Console){
+    Write-host "`n`n--[ Begin ]------------------------------------" -foregroundcolor Yellow
     Write-host "`n`n   DHCP Server : " -ForegroundColor Yellow -NoNewline
     Write-Host $SiteServer -ForegroundColor White
+}
+
+If ($Debug){
+    $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "Debug" -Value $true
 }
 
 Try {
@@ -545,13 +552,20 @@ $ReportHeader = "
 $ReportHeader = $ReportHeader +"<table bgcolor='black' border='0' width='100%'></table>"
 
 #--[ HTML Current state bar ]--    
-$ReportHeader = $ReportHeader +"
-<table border='0' width='100%'>
+$ReportHeader = $ReportHeader +"<table border='0' width='100%'>"
+If (($Over80 -ge 1) -or ($Over95 -ge 1)){
+    $ReportHeader = $ReportHeader +"  
     <tr bgcolor=$HexLtGrey>
-         <td colspan='5' height='5' align='center'><strong><font color=$HexBlack size='2' face='tahoma'>Current System State:</td><strong>
-    </tr>
-    <tr bgcolor=$HexLtGrey><td></td>
-"        
+         <td colspan='5' height='5' align='center'><strong><font color=$HexBlack size='2' face='tahoma'>Current System State:&nbsp;&nbsp;<font color=$HexRed size='2' face='tahoma'>At least one scope is out of tolerance.</td><strong>
+    </tr>"
+}Else{
+    $ReportHeader = $ReportHeader +"  
+    <tr bgcolor=$HexLtGrey>
+         <td colspan='5' height='5' align='center'><strong><font color=$HexBlack size='2' face='tahoma'>Current System State:&nbsp;&nbsp;<font color=$HexGreen size='2' face='tahoma'>All scopes are within tolerance.</td><strong>
+    </tr>" 
+}
+
+$ReportHeader = $ReportHeader +"<tr bgcolor=$HexLtGrey><td></td>"
 If ($Over80 -ge 1){
     $SendEmail = $True
     $ReportHeader = $ReportHeader +"<td width='20%' height='5' align='center'><span style=background-color:$HexYellow>$Over80 scopes are over 80%</span></td>"
@@ -609,14 +623,20 @@ If (Test-Path -path $ExtOption.PurgeFile){
 $Email.IsBodyHTML = $true
 $Email.From = $ExtOption.Sender
 
-If(((get-date).DayOfWeek -eq "Sunday") -or ($SendEmail)){  #--[ Sends to main recipient only on Sunday or if needed ]--
-    $Email.To.Add($ExtOption.Recipient0)      
-#    $Email.To.Add($ExtOption.Recipient1) 
+If (!($ExtOption.Debug)){
+    If(((get-date).DayOfWeek -eq "Sunday") -or ($SendEmail)){  #--[ Sends to main recipient only on Sunday or if needed ]--
+        $Email.To.Add($ExtOption.Recipient0)      
+        #    $Email.To.Add($ExtOption.Recipient1) 
+    }Else{
+        $Email.To.Add($ExtOption.Recipient1)   #--[ Always send to additional recipients for daily status ]--
+        #    $Email.To.Add($ExtOption.Recipient2)  
+        #    $Email.To.Add($ExtOption.Recipient3)  
+    }
 }Else{
-    $Email.To.Add($ExtOption.Recipient1)   #--[ Always send to additional recipients for daily status ]--
-#    $Email.To.Add($ExtOption.Recipient2)  
-#    $Email.To.Add($ExtOption.Recipient3)  
+    $Email.To.Add($ExtOption.Recipient1)   #--[ Only send to additionl recipients when in debug mode ]--
 }
+
+
 If ($Over95 -gt 0){
     $Email.Subject = "DHCP Status ALERT"
 }Else{
