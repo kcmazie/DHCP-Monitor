@@ -35,7 +35,8 @@
                    : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly removed after v3.0
                    : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
                    : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
-                   : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.  Added debug option.
+                   : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.  
+                   :                    Added debug option.
                    #>$ScriptVer = "v4.22"<#
                    :                  
 ==============================================================================#>
