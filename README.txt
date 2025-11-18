@@ -37,6 +37,7 @@
                    : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
                    : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.  
                    :                    Added debug option.
-                   #>$ScriptVer = "v4.22"<#
+                   : v4.30 - 11-18-25 - Added ability to exclude selected scopes from reporting when over 80%
+                   #>$ScriptVer = "v4.30"<#
                    :                  
 ==============================================================================#>
