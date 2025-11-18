@@ -36,7 +36,8 @@
                    : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
                    : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
                    : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.  Added debug option.
-                   #>$ScriptVer = "v4.22"<#
+                   : v4.30 - 11-18-25 - Added ability to exclude selected scopes from reporting when over 80%
+                   #>$ScriptVer = "v4.30"<#
                    :                  
 ==============================================================================#>
 Clear-Host
@@ -110,6 +111,8 @@ Function LoadConfig ($ConfigFile){  #--[ Read and load configuration file ]-----
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "DomainArray" -Value $Config.Settings.Update.DomainArray
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "PurgeFail" -Value $false
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "Debug" -Value $False
+        $Excludes = $Config.SelectNodes('//Exclude') | Select-Object -Expand '#text'
+        $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "ExcludeList" -Value $Excludes
     }Else{
         StatusMsg "MISSING XML CONFIG FILE.  File is required.  Script aborted..." " Red" $ExtOption.Console
         break;break;break
@@ -270,7 +273,11 @@ foreach ($Scope in $SiteScopes ){
     $ScopeID = $Scope.ScopeID.ipaddresstostring
     $ScopeName = $Scope.name
     $ScopeDescription = $Scope.Description
-    $ScopeStatus = $Scope.State
+    If ($ExtOption.ExcludeList -contains $ScopeID ){
+        $ScopeStatus = "Active EXCLUDED"
+    }Else{
+        $ScopeStatus = $Scope.State
+    }
     $ScopeStats = Get-DhcpServerv4ScopeStatistics -ScopeId $ScopeID
     $AddrInUse = [int]$ScopeStats.InUse 
     $AddrFree = [int]$ScopeStats.Free
@@ -289,7 +296,11 @@ foreach ($Scope in $SiteScopes ){
         If ($ScopeStatus -like "*inactive*"){
             Write-host $ScopeStatus"   " -ForegroundColor Red
         }Else{
-            Write-host $ScopeStatus"   " -ForegroundColor Green
+             If ($ExtOption.ExcludeList -contains $ScopeID ){
+                Write-host "EXCLUDED   " -ForegroundColor Yellow
+            }Else{
+                Write-host $ScopeStatus"   " -ForegroundColor Green
+            }
         }
         write-host "     Statistics  : " -ForegroundColor Yellow -NoNewline
         write-host "Total Addr  ="$AddrTotal -ForegroundColor white
@@ -426,17 +437,24 @@ foreach ($Scope in $SiteScopes ){
             Detect2 $Value $ScopeID $VendorClass        
         } #>
     }
-    If ($AddrPercent -ge 95){
-        $Data = $Data + '<tr bgcolor='+$HexRed+'><font color='+$HexYellow+'><strong>'
-        $SendEmail = $True
-        $Over95++
-    }ElseIf ($AddrPercent -ge 80){
-        $Data = $Data + '<tr bgcolor='+$HexYellow+'><strong>' 
-        $SendEmail = $True
-        $Over80++
-    }Else{
+    If ($ExtOption.ExcludeList -contains $ScopeID ){
         $Data = $Data + '<tr bgcolor='+$HexLtGrey+'>'
+
+    }Else{
+        If ($AddrPercent -ge 95){
+            $Data = $Data + '<tr bgcolor='+$HexRed+'><font color='+$HexYellow+'><strong>'
+            $SendEmail = $True
+            $Over95++
+        }ElseIf ($AddrPercent -ge 80){
+            $Data = $Data + '<tr bgcolor='+$HexYellow+'><strong>' 
+            $SendEmail = $True
+            $Over80++
+        }Else{
+            $Data = $Data + '<tr bgcolor='+$HexLtGrey+'>'
+        }
     }
+
+
     $Data = $Data + "<td  align='center'>$($ScopeId)</td>"
     If ($PurgeFail){
         $Data = $Data + "<td  align='center'><span style=background-color:$HexRed>
@@ -499,6 +517,7 @@ foreach ($Scope in $SiteScopes ){
     $Data = $Data + "<td align='center'>$($Scope.LeaseDuration)</td>"
     $Data = $Data + "</tr>"     
 }
+
 $Data = $Data + "</table></table>
 Script Version: "+$ScriptVer+" 
 </body></html>"
@@ -587,8 +606,8 @@ $ReportHeader = $ReportHeader +"
     </tr>
         <tr bgcolor=$HexLtGrey>
         <td colspan='5' height='5' align='center'><font color=$HexBlack size='2' face='tahoma'>Scopes over 80% in use are flagged as 
-        <span style=background-color:$HexYellow>WARNINGS</span>. &nbsp;&nbsp;&nbsp;&nbsp;Scopes over 95% in use are flagged as
-        <span style=background-color:$HexRed><font color=$HexWhite>CRITICALS</font></span>.</font>
+        <span style=background-color:$HexYellow>WARNINGS</span> unless excluded. &nbsp;&nbsp;&nbsp;&nbsp;Scopes over 95% in use are flagged as
+        <span style=background-color:$HexRed><font color=$HexWhite>CRITICALS</font></span> unless excluded.</font>
     </tr>"
 If ($PurgeFailCount -gt 0){
     $ReportHeader = $ReportHeader +"<tr bgcolor=$HexLtGrey>
@@ -636,7 +655,6 @@ If (!($ExtOption.Debug)){
     $Email.To.Add($ExtOption.Recipient1)   #--[ Only send to additionl recipients when in debug mode ]--
 }
 
-
 If ($Over95 -gt 0){
     $Email.Subject = "DHCP Status ALERT"
 }Else{
@@ -678,5 +696,8 @@ StatusMsg $Msg "Red" $ExtOption.Console
 		<NtpArray>10.10.10.10,20.20.20.20</NtpArray>
 		<DomainArray>"mailbag.org"</DomainArray>
 	</Update>
+  	<Exclusions>
+		<Exclude>192.168.10.0</Exclude>
+	</Exclusions>
 </Settings> 
 #>
