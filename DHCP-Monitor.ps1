@@ -26,18 +26,21 @@
                    : v2.10 - 12-15-23 - Adjusted email options, report format, other minor bugs.
                    : v3.00 - 12-25-23 - Relocated private settings out to external config for publishing. 
                    : v3.10 - 01-25-24 - Altered email send so it always goes out if over 80 or 95 %
-                   : v3.20 - 05-21-24 - Added color gradiations for % used column.  Added generalized 
+                   : v3.20 - 05-21-24 - Added color graduations for % used column.  Added generalized 
                    :                    grey background.
                    : v4.00 - 07-12-24 - Fixed detection of failed purges.  Added new messaging on report
-                   :                    for failed purges as well as attching log files to the email.  
+                   :                    for failed purges as well as attaching log files to the email.  
                    :                    Altered detection of console verses IDE.  Shuffled order of 
                    :                    operations to better report stats.  Tweaked HTML report coloring.
-                   : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly remove after v3.0
-                   : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
+                   : v4.10 - 07-15-24 - Added graduated % colors back.  Accidentally remove after v3.0
+                   : v4.20 - 12-20-24 - Adjusted order of header rows, minor verbiage. Added black bars.
                    : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
-                   : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.  Added debug option.
+                   : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.
+                   :                    Added debug option.
                    : v4.30 - 11-18-25 - Added ability to exclude selected scopes from reporting when over 80%
-                   #>$ScriptVer = "v4.30"<#
+                   : v4.40 - 10-12-26 - Added force option to log removal.  Fixed a few misspelled words and typos. 
+                   :                    Corrected StatusMsg function 
+                   #>$ScriptVer = "v4.40"<#
                    :                  
 ==============================================================================#>
 Clear-Host
@@ -68,29 +71,37 @@ Function GetConsoleHost ($ExtOption){  #--[ Detect if we are using a script edit
     $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $False -force
     Switch ($Host.Name){
         'consolehost'{
-            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $true -force
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "ConsoleState" -Value $true -force
             Write-Host "PowerShell Console detected. Output suppressed." -ForegroundColor Cyan
         }
         'Windows PowerShell ISE Host'{
-            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $True -force
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "ConsoleState" -Value $True -force
             Write-Host "PowerShell ISE editor detected." -ForegroundColor Cyan
         }
         'PrimalScriptHostImplementation'{
-            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $True -force
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "ConsoleState" -Value $True -force
             Write-Host "PrimalScript or PowerShell Studio editor detected." -ForegroundColor Cyan
         }
         "Visual Studio Code Host" {
-            $ExtOption | Add-Member -MemberType NoteProperty -Name "Console" -Value $True -force
+            $ExtOption | Add-Member -MemberType NoteProperty -Name "ConsoleState" -Value $True -force
             Write-Host "Visual Studio Code editor detected." -ForegroundColor Cyan
         }
     }
     Return $ExtOption
 }
 
-Function StatusMsg ($Msg, $Color, $Console){
-    If (($Host.Name -ne "consolehost") -or ($Console -eq $True)){   #--[ Only write status to screen if in an editor ]--
-        Write-Host $Msg -ForegroundColor $Color
+Function StatusMsg ($Msg, $Color, $ExtOption){
+    If ($Null -eq $Color){
+        $Color = "Magenta"
     }
+    If ($ExtOption.ConsoleState){
+        Write-Host "-- Script Status: " -NoNewline -ForegroundColor "Magenta"
+        Write-host $Msg -ForegroundColor $Color
+    }
+    If ($ExtOption.Debug){
+		Add-Content -Path $PSScriptRoot\Debug.log -Value $Msg
+	}
+    $Msg = ""
 }
 
 Function LoadConfig ($ConfigFile){  #--[ Read and load configuration file ]-------------------------------------
@@ -114,13 +125,13 @@ Function LoadConfig ($ConfigFile){  #--[ Read and load configuration file ]-----
         $Excludes = $Config.SelectNodes('//Exclude') | Select-Object -Expand '#text'
         $ExtOption | Add-Member -Force -MemberType NoteProperty -Name "ExcludeList" -Value $Excludes
     }Else{
-        StatusMsg "MISSING XML CONFIG FILE.  File is required.  Script aborted..." " Red" $ExtOption.Console
+        StatusMsg "MISSING XML CONFIG FILE.  File is required.  Script aborted..." " Red" $ExtOption
         break;break;break
     }
     Return $ExtOption
 }
 
-Function Detect1 ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray){
+Function Detect1 ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray,$ExtOption){
     Try{
         $Detect = Get-DhcpServerv4OptionValue -ScopeId $ScopeID -OptionId $OptionID -ErrorAction SilentlyContinue
         $Detected = $Detect.Value.Split(" ")
@@ -128,7 +139,7 @@ Function Detect1 ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray){
         $Detected = $Null
     }
     $Msg = '   '+$Option+' Entries : '+$Detected.Count
-    StatusMsg $Msg "Yellow" $ExtOption.Console
+    StatusMsg $Msg "Yellow" $ExtOption
     If (($Detected.Count -lt $OptionArray.Count) -Or ($Detected.Count -gt $OptionArray.Count)){
         $Update = $true
     }
@@ -145,19 +156,19 @@ Function Detect1 ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray){
     Return $Update
 }
 
-Function Detect2 ($Value,$ScopeID,$VendorClass){
+Function Detect2 ($Value,$ScopeID,$VendorClass,$ExtOption){
     $Detect = Get-DhcpServerv4OptionValue -ScopeId $ScopeID -VendorClass $VendorClass -ErrorAction SilentlyContinue
     If ($Detect.Value -eq $Value){
         $Msg = " - Value Verified -"
-        StatusMsg $Msg "Green" $ExtOption.Console
+        StatusMsg $Msg "Green" $ExtOption
     }Else{
         $Msg = " - Value Not Verified -"
-        StatusMsg $Msg "Red" $ExtOption.Console
+        StatusMsg $Msg "Red" $ExtOption
     } 
 }
 
-Function OptionUpdate ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray){   #==[ Update Scope Option ]=====================
-    $Update = Detect1 $ScopeName $ScopeID $Option $OptionID $OptionArray
+Function OptionUpdate ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray,$ExtOption){   #==[ Update Scope Option ]=====================
+    $Update = Detect1 $ScopeName $ScopeID $Option $OptionID $OptionArray $ExtOption
     If (($ScopeName -notlike "*DMZ*") -And ($Update)){
         Remove-DhcpServerv4OptionValue -ScopeId $ScopeID -OptionId $OptionID -ErrorAction SilentlyContinue -WhatIf
         Start-Sleep -Milliseconds 500
@@ -166,7 +177,7 @@ Function OptionUpdate ($ScopeName,$ScopeID,$Option,$OptionID,$OptionArray){   #=
         }Else{
             Set-DhcpServerv4OptionValue -ScopeId $ScopeID -OptionId $OptionID $OptionArray.Split(",") -WhatIf
         }
-        $Update = Detect1 $ScopeName $ScopeID $Option $OptionID $OptionArray
+        $Update = Detect1 $ScopeName $ScopeID $Option $OptionID $OptionArray $ExtOption
     }
     $Update = $False    
 }
@@ -202,7 +213,7 @@ $HexGreen = '#006600'
 $Total = 0
 $SiteServer = (Get-DhcpServerInDC).DnsName | Where-Object {$_.SubString(0,3) -eq $ExtOption.SiteServerPrefix}
 
-If ($ExtOption.Console){
+If ($ExtOption.ConsoleState){
     Write-host "`n`n--[ Begin ]------------------------------------" -foregroundcolor Yellow
     Write-host "`n`n   DHCP Server : " -ForegroundColor Yellow -NoNewline
     Write-Host $SiteServer -ForegroundColor White
@@ -221,7 +232,7 @@ Try {
 }
 $ScopeCount = $SiteScopes.count
 
-If ($ExtOption.Console){
+If ($ExtOption.ConsoleState){
     write-host "   Scope Count : " -ForegroundColor Yellow -NoNewline
     Write-Host $ScopeCount -ForegroundColor White
 }
@@ -285,7 +296,7 @@ foreach ($Scope in $SiteScopes ){
     $AddrTotal = $AddrFree+$AddrInUse
     $Total = $Total+[int]$ScopeStats.InUse 
 
-    If ($ExtOption.Console){  #--[ Display running results if console is enabled ]--
+    If ($ExtOption.ConsoleState){  #--[ Display running results if console is enabled ]--
         write-host `n"        Scope ID : " -ForegroundColor Yellow -NoNewline
         write-host $ScopeID"   " -ForegroundColor White        
         write-host "     Scope Name  : " -ForegroundColor Yellow -NoNewline
@@ -339,7 +350,7 @@ foreach ($Scope in $SiteScopes ){
     }
 
     If ($Purge){
-        If ($ExtOption.Console){
+        If ($ExtOption.ConsoleState){
             Write-Host "                 -- Bad Lease Purge Enabled ---" -ForegroundColor Cyan 
         }
         $LeaseInfo = Get-dhcpserverv4lease -ScopeId $ScopeID  | Select-object Ipaddress,addressstate,clientid,hostname,leaseexpirytime
@@ -349,7 +360,7 @@ foreach ($Scope in $SiteScopes ){
                 $Ping = New-Object System.Net.NetworkInformation.Ping
                 $Response = $Ping.Send($Item.Ipaddress,$Timeout)
                 If ($Response.Status -eq "Success"){
-                    If ($ExtOption.Console){
+                    If ($ExtOption.ConsoleState){
                         write-host "  --"$Item.Ipaddress"Is Alive." -ForegroundColor Green -NoNewline
                         write-host "    ("$Item.clientid")`n"
                     }
@@ -359,7 +370,7 @@ foreach ($Scope in $SiteScopes ){
                         Remove-DhcpServerv4Lease -ScopeId $ScopeID -ClientId $Item.clientid -confirm:$false -ErrorAction:Stop  #-whatif
                         $Msg = 'Deleted lease: "'+$Item.Ipaddress+'" to: "'+$Item.clientID+'" from scope: "'+$ScopeDescription
                         Add-Content -Path $ExtOption.PurgeFile -Value $Msg
-                        If ($ExtOption.Console){
+                        If ($ExtOption.ConsoleState){
                             write-host $Item.Ipaddress -ForegroundColor red -NoNewline
                             write-host "    "$Item.clientid
                         }
@@ -371,7 +382,7 @@ foreach ($Scope in $SiteScopes ){
                         $Msg = 'FAILED to delete lease: "'+$Item.Ipaddress+'" to: "'+$Item.clientID+'" from scope: "'+$ScopeDescription
                         Add-Content -Path $ExtOption.PurgeFile -Value $Msg
                         $ErrorMAC = $ErrorMessage.Split(" ")[4]
-                        If ($ExtOption.Console){
+                        If ($ExtOption.ConsoleState){
                             Write-Host "  -- Failed to delete IP lease for"$ErrorMAC -ForegroundColor Yellow
                             #write-host $ErrorMessage -ForegroundColor yellow
                             write-host $FailedItem -ForegroundColor cyan
@@ -391,31 +402,31 @@ foreach ($Scope in $SiteScopes ){
         #==[ DNS Update ]================================================================
         OptionUpdate $ScopeName $ScopeID "DNS" "006" $ExtOption.DnsArray
         $Msg = "               : Updating DNS Option 006..."
-        StatusMsg $Msg "Cyan" $ExtOption.Console
+        StatusMsg $Msg "Cyan" $ExtOption
 
         #==[ NTP Update ]================================================================
         OptionUpdate $ScopeName $ScopeID "NTP" "042" $ExtOption.NtpArray
         $Msg = "               : Updating NTP Option 042..."
-        StatusMsg $Msg "Cyan" $ExtOption.Console
+        StatusMsg $Msg "Cyan" $ExtOption
 
         #==[ Domain Update ]=============================================================
         OptionUpdate $ScopeName $ScopeID "DOM" "015" $ExtOption.DomainArray
         $Msg = "               : Updating Domain Option 015..."
-        StatusMsg $Msg "Cyan" $ExtOption.Console
+        StatusMsg $Msg "Cyan" $ExtOption
   
         #==[ Scope Name Adjustment ]=====================================================
         If ($ScopeName -notlike "$ExtOption.NewPrefix*"){
             $NewName = "$ExtOption.NewPrefix "+$ScopeName
             Set-DhcpServerv4Scope -ScopeId $ScopeID -Name $NewName -whatif
             $Msg = "               : Updating Scope Name..."
-            StatusMsg $Msg "Cyan" $ExtOption.Console
+            StatusMsg $Msg "Cyan" $ExtOption
         } #>
 
         #==[ Description Update (Forces description to match scope name) ]===========================================
         #--[  ]--
         Set-DhcpServerv4Scope -ScopeId $ScopeID -Description $ScopeName -whatif
         $Msg = "               : Updating Description..."
-        StatusMsg $Msg "Cyan" $ExtOption.Console
+        StatusMsg $Msg "Cyan" $ExtOption
         #>
 
         <#==[ Wireless Extras ]==============================================================
@@ -427,14 +438,14 @@ foreach ($Scope in $SiteScopes ){
             write-host "     Applying : " -ForegroundColor Yellow -NoNewline
             write-host 'OptionId:'$OptionID' - VendorClass: '$VendorClass' - Value: '$Value -ForegroundColor Magenta -nonewline
            # Set-DhcpServerv4OptionValue -ScopeId $ScopeID -OptionId $OptionID -VendorClass $VendorClass -Value $Value #-WhatIf
-            Detect2 $Value $ScopeID "Cisco AP 3700" 
+            Detect2 $Value $ScopeID "Cisco AP 3700" $ExtOption
            
             Start-Sleep -milliseconds 500    
             $VendorClass = "Cisco AP 2800"
             write-host "     Applying : " -ForegroundColor Yellow -NoNewline
             write-host 'OptionId:'$OptionID' - VendorClass: '$VendorClass' - Value: '$Value -ForegroundColor Magenta -nonewline
             #Set-DhcpServerv4OptionValue -ScopeId $ScopeID -OptionId $OptionID -VendorClass $VendorClass -Value $Value #-WhatIf
-            Detect2 $Value $ScopeID $VendorClass        
+            Detect2 $Value $ScopeID $VendorClass $ExtOption        
         } #>
     }
     If ($ExtOption.ExcludeList -contains $ScopeID ){
@@ -663,15 +674,16 @@ If ($Over95 -gt 0){
 $ErrorActionPreference = "stop"
 $Email.Body = $Report
 $Msg = "`n--- Email Sent ---"
-StatusMsg $Msg "Red" $ExtOption.Console
+StatusMsg $Msg "Red" $ExtOption
 $Smtp.Send($Email)
 
 #--[ Only keep 10 of the last of each log ]-- 
-Get-ChildItem -Path $PSScriptRoot | Where-Object {(-not $_.PsIsContainer) -and ($_.Name -like "*PurgeLog*")} | Sort-Object -Descending -Property LastTimeWrite | Select-Object -Skip 10 | Remove-Item
-Get-ChildItem -Path $PSScriptRoot | Where-Object {(-not $_.PsIsContainer) -and ($_.Name -like "*Details*")} | Sort-Object -Descending -Property LastTimeWrite | Select-Object -Skip 10 | Remove-Item
+Start-Sleep -sec 5
+Get-ChildItem -Path $PSScriptRoot | Where-Object {(-not $_.PsIsContainer) -and ($_.Name -like "DHCP_PurgeLog*")} | Sort-Object -Descending -Property LastTimeWrite | Select-Object -Skip 10 | Remove-Item -Force -ErrorAction:SilentlyContinue
+Get-ChildItem -Path $PSScriptRoot | Where-Object {(-not $_.PsIsContainer) -and ($_.Name -like "DHCP_Details*")} | Sort-Object -Descending -Property LastTimeWrite | Select-Object -Skip 10 | Remove-Item -Force -ErrorAction:SilentlyContinue
 
 $Msg = "`n--- Completed ---`n"
-StatusMsg $Msg "Red" $ExtOption.Console
+StatusMsg $Msg "Red" $ExtOption
 
 
 <#--[ XML File Example ]-----------------------------------------
