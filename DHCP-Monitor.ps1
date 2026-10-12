@@ -673,8 +673,9 @@ If ($Over95 -gt 0){
 }
 $ErrorActionPreference = "stop"
 $Email.Body = $Report
-$Msg = "`n--- Email Sent ---"
-StatusMsg $Msg "Red" $ExtOption
+
+Write-host ""
+StatusMsg "--- Email Sent ---" "Red" $ExtOption
 $Smtp.Send($Email)
 
 #--[ Only keep 10 of the last of each log ]-- 
@@ -682,8 +683,7 @@ Start-Sleep -sec 5
 Get-ChildItem -Path $PSScriptRoot | Where-Object {(-not $_.PsIsContainer) -and ($_.Name -like "DHCP_PurgeLog*")} | Sort-Object -Descending -Property LastTimeWrite | Select-Object -Skip 10 | Remove-Item -Force -ErrorAction:SilentlyContinue
 Get-ChildItem -Path $PSScriptRoot | Where-Object {(-not $_.PsIsContainer) -and ($_.Name -like "DHCP_Details*")} | Sort-Object -Descending -Property LastTimeWrite | Select-Object -Skip 10 | Remove-Item -Force -ErrorAction:SilentlyContinue
 
-$Msg = "`n--- Completed ---`n"
-StatusMsg $Msg "Red" $ExtOption
+StatusMsg "--- Completed ---" "Red" $ExtOption
 
 
 <#--[ XML File Example ]-----------------------------------------
