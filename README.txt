@@ -26,18 +26,20 @@
                    : v2.10 - 12-15-23 - Adjusted email options, report format, other minor bugs.
                    : v3.00 - 12-25-23 - Relocated private settings out to external config for publishing. 
                    : v3.10 - 01-25-24 - Altered email send so it always goes out if over 80 or 95 %
-                   : v3.20 - 05-21-24 - Added color gradiations for % used column.  Added generalized 
+                   : v3.20 - 05-21-24 - Added color graduations for % used column.  Added generalized 
                    :                    grey background.
                    : v4.00 - 07-12-24 - Fixed detection of failed purges.  Added new messaging on report
-                   :                    for failed purges as well as attching log files to the email.  
+                   :                    for failed purges as well as attaching log files to the email.  
                    :                    Altered detection of console verses IDE.  Shuffled order of 
                    :                    operations to better report stats.  Tweaked HTML report coloring.
-                   : v4.10 - 07-15-24 - Added gradiated % colors back.  Accidentaly removed after v3.0
-                   : v4.20 - 12-20-24 - Adjested order of header rows, minor verbiage. Added black bars.
+                   : v4.10 - 07-15-24 - Added graduated % colors back.  Accidentally remove after v3.0
+                   : v4.20 - 12-20-24 - Adjusted order of header rows, minor verbiage. Added black bars.
                    : v4.21 - 12-26-24 - Adjusted current state table wording for clarity.
-                   : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.  
+                   : v4.22 - 05-05-25 - Another adjustment to current state table wording for added clarity.
                    :                    Added debug option.
                    : v4.30 - 11-18-25 - Added ability to exclude selected scopes from reporting when over 80%
-                   #>$ScriptVer = "v4.30"<#
+                   : v4.40 - 10-12-26 - Added force option to log removal.  Fixed a few misspelled words and typos. 
+                   :                    Corrected StatusMsg function 
+                   #>$ScriptVer = "v4.40"<#
                    :                  
 ==============================================================================#>
